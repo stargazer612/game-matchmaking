@@ -1,13 +1,13 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicI64 , AtomicU64, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 
 //Metrics struct to track matchmaking performance
 pub struct Metrics {
-    pub players_queued: AtomicU64,        //Total number of players who have entered the matchmaking queue
-    pub matches_created: AtomicU64,        //Total number of matches created
-    pub players_matched: AtomicU64,         //Total number of players successfully matched into games
-    pub total_wait_ms: AtomicU64,             //Cumulative wait time of all players (in milliseconds)
-    pub current_pool_size: AtomicU64,             //Current number of players waiting in the matchmaking queue
+    pub players_queued: AtomicU64, //Total number of players who have entered the matchmaking queue
+    pub matches_created: AtomicU64, //Total number of matches created
+    pub players_matched: AtomicU64, //Total number of players successfully matched into games
+    pub total_wait_ms: AtomicU64,  //Cumulative wait time of all players (in milliseconds)
+    pub current_pool_size: AtomicU64, //Current number of players waiting in the matchmaking queue
 }
 
 impl Metrics {
@@ -56,11 +56,26 @@ impl Metrics {
 
     pub fn report(&self) {
         println!("--- Matchmaking Metrics ---");
-        println!("Players Queued: {}", self.players_queued.load(Ordering::Relaxed));
-        println!("Matches Created: {}", self.matches_created.load(Ordering::Relaxed));
-        println!("Players Matched: {}", self.players_matched.load(Ordering::Relaxed));
-        println!("Average Wait Time: {:.2} seconds", self.avg_wait_time() / 1000.0);
+        println!(
+            "Players Queued: {}",
+            self.players_queued.load(Ordering::Relaxed)
+        );
+        println!(
+            "Matches Created: {}",
+            self.matches_created.load(Ordering::Relaxed)
+        );
+        println!(
+            "Players Matched: {}",
+            self.players_matched.load(Ordering::Relaxed)
+        );
+        println!(
+            "Average Wait Time: {:.2} seconds",
+            self.avg_wait_time() / 1000.0
+        );
         println!("Match Rate: {:.2}%", self.match_rate_pct());
-        println!("Current Pool Size: {}", self.current_pool_size.load(Ordering::Relaxed));
-    }    
+        println!(
+            "Current Pool Size: {}",
+            self.current_pool_size.load(Ordering::Relaxed)
+        );
+    }
 }

@@ -1,11 +1,11 @@
-use crate::player::Player;
 use crate::match_result::GameMatch;
 use crate::metrics::Metrics;
+use crate::player::Player;
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::Sender;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -24,16 +24,16 @@ pub fn run_worker(
     while !stop_flag.load(Ordering::Relaxed) {
         match try_form_match(&pool, &metrics, &match_id_counter) {
             Some(game_match) => {
-                idle_cycles = 0; 
+                idle_cycles = 0;
 
                 if match_tx.send(game_match).is_err() {
-                    break; 
+                    break;
                 }
             }
             None => {
                 idle_cycles += 1;
                 let sleep_ms = match idle_cycles {
-                    1..=5 => 1,       
+                    1..=5 => 1,
                     6..=20 => 5,
                     _ => 15,
                 };
@@ -54,7 +54,7 @@ fn try_form_match(
         let mut guard = pool.lock().unwrap();
 
         if guard.len() < 10 {
-            return None; 
+            return None;
         }
 
         guard.sort_by(|a, b| {
@@ -65,7 +65,7 @@ fn try_form_match(
 
         let indices = find_group_indices(&guard)?;
 
-        let index_set: HashMap<usize> = indices.into_iter().collect();
+        let index_set: HashMap<usize, ()> = indices.into_iter().map(|i| (i, ())).collect();
 
         let mut selected = Vec::with_capacity(10);
         let mut remaining = Vec::with_capacity(guard.len().saturating_sub(10));
@@ -86,7 +86,7 @@ fn try_form_match(
     let wait_times: Vec<u64> = selected.iter().map(|p| p.wait_ms()).collect();
     metrics.record_match_created(&wait_times);
 
-    let (team_a, team_b) = balance_teams(&selected);
+    let (team_a, team_b) = balance_teams(selected);
 
     let match_id = match_id_counter.fetch_add(1, Ordering::SeqCst);
 
@@ -102,7 +102,8 @@ fn find_group_indices(sorted_players: &[Player]) -> Option<Vec<usize>> {
     for i in 0..=(n - 10) {
         let window = &sorted_players[i..(i + 10)];
 
-        let min_acceptable_range = window.iter()
+        let min_acceptable_range = window
+            .iter()
             .map(|p| p.acceptable_skill_range())
             .fold(f64::NEG_INFINITY, f64::max);
 
@@ -117,26 +118,31 @@ fn find_group_indices(sorted_players: &[Player]) -> Option<Vec<usize>> {
 }
 
 fn balance_teams(players: Vec<Player>) -> (Vec<Player>, Vec<Player>) {
-    debug_assert_eq!(players.len(), 10, "Must have exactly 10 players to balance teams");
+    debug_assert_eq!(
+        players.len(),
+        10,
+        "Must have exactly 10 players to balance teams"
+    );
 
     let mut best_diff = f64::INFINITY;
     let mut best_mask: u16 = 0b00000_11111; // first default: players 0-4 in team A
 
     for mask in 0u16..(1u16 << 10) {
         if mask.count_ones() != 5 {
-            continue; 
+            continue;
         }
 
-        let (sum_a, sum_b) = players.iter().enumerate().fold(
-            (0.0f64, 0.0f64), 
-            |(sa, sb), (i, player)| {
-                if (mask & (1 << i)) != 0 {
-                    (sa + player.skill_rating, sb) //Player i goes to team A
-                } else {
-                    (sa, sb + player.skill_rating)  //Player i goes to team B
-                }
-            },
-        );
+        let (sum_a, sum_b) =
+            players
+                .iter()
+                .enumerate()
+                .fold((0.0f64, 0.0f64), |(sa, sb), (i, player)| {
+                    if (mask & (1 << i)) != 0 {
+                        (sa + player.skill_rating, sb) //Player i goes to team A
+                    } else {
+                        (sa, sb + player.skill_rating) //Player i goes to team B
+                    }
+                });
 
         let diff = (sum_a - sum_b).abs();
         if diff < best_diff {
@@ -144,7 +150,7 @@ fn balance_teams(players: Vec<Player>) -> (Vec<Player>, Vec<Player>) {
             best_mask = mask;
 
             if diff < 1.0 {
-                break; 
+                break;
             }
         }
     }
@@ -160,18 +166,19 @@ fn balance_teams(players: Vec<Player>) -> (Vec<Player>, Vec<Player>) {
     (team_a, team_b)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     fn player(id: u64, skill: f64) -> Player {
         Player::new(id, skill)
     }
 
     fn make_sorted_pool(rating: Vec<f64>) -> Vec<Player> {
-        let mut players: Vec<Player> = rating.into_iter().enumerate()
-            .map(|(i, &r)| player(i as u64, r))
+        let mut players: Vec<Player> = rating
+            .into_iter()
+            .enumerate()
+            .map(|(i, r)| player(i as u64, r))
             .collect();
 
         players.sort_by(|a, b| a.skill_rating.partial_cmp(&b.skill_rating).unwrap());
@@ -182,8 +189,7 @@ mod tests {
     #[test]
     fn test_finds_group_in_tight_clusters() {
         let pool = make_sorted_pool(vec![
-            1460.0, 1465.0, 1470.0, 1475.0, 1480.0,
-            1485.0, 1490.0, 1495.0, 1498.0, 1500.0,
+            1460.0, 1465.0, 1470.0, 1475.0, 1480.0, 1485.0, 1490.0, 1495.0, 1498.0, 1500.0,
         ]);
 
         let result = find_group_indices(&pool);
@@ -193,20 +199,24 @@ mod tests {
     #[test]
     fn no_group_if_spread_out_pool() {
         let pool = make_sorted_pool(vec![
-            100.0, 300.0, 500.0, 700.0, 900.0,
-            1100.0, 1300.0, 1500.0, 1700.0, 1900.0,
+            100.0, 300.0, 500.0, 700.0, 900.0, 1100.0, 1300.0, 1500.0, 1700.0, 1900.0,
         ]);
 
         let result = find_group_indices(&pool);
-        assert!(result.is_none(), "Should not find a group in a spread-out pool");
+        assert!(
+            result.is_none(),
+            "Should not find a group in a spread-out pool"
+        );
     }
 
     #[test]
     fn balance_teams_produces_equal_teams() {
-        let players: Vec<Player> = (0..10).map(|i| {
-            let skill = if i < 5 { 1000.0 } else { 2000.0 };
-            player(i, skill)
-        }).collect();
+        let players: Vec<Player> = (0..10)
+            .map(|i| {
+                let skill = if i < 5 { 1000.0 } else { 2000.0 };
+                player(i, skill)
+            })
+            .collect();
 
         let (team_a, team_b) = balance_teams(players);
 
@@ -214,8 +224,10 @@ mod tests {
         let sum_b: f64 = team_b.iter().map(|p| p.skill_rating).sum();
 
         assert!(
-            (sum_a - sum_b).abs() < 1001.0, 
-            "Teams should be balanced as possible, {} vs {}", sum_a, sum_b
+            (sum_a - sum_b).abs() < 1001.0,
+            "Teams should be balanced as possible, {} vs {}",
+            sum_a,
+            sum_b
         );
     }
 }
