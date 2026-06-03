@@ -31,7 +31,7 @@ Match #0034 │ A: 2048 vs B: 2048 │ Q:0.985 [██████████] 
 ### Run
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/matchmaker.git
+git clone https://github.com/stargazer612/game-matchmaking.git
 cd matchmaker
 cargo run --release
 ```
